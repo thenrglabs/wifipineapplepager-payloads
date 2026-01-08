@@ -147,7 +147,8 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .wifi-bar .wifi-icon.connected{fill:var(--accent)}
 .wifi-bar .wifi-icon.disconnected{fill:var(--text2)}
 .wifi-bar .wifi-status{flex:1;display:flex;align-items:center;gap:8px}
-.wifi-bar .wifi-ssid{color:var(--text);font-weight:500}
+.wifi-bar .wifi-ssid{color:var(--text);font-weight:500;cursor:pointer}
+.wifi-bar .wifi-ssid.clickable:hover{color:var(--accent)}
 .wifi-bar .wifi-signal{color:var(--text2);font-size:0.9em}
 .wifi-bar .wifi-details{display:flex;align-items:center;gap:12px}
 .wifi-bar .wifi-btn{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:0.85em;transition:all 0.15s;display:flex;align-items:center;gap:4px}
@@ -225,7 +226,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 <div class="wifi-bar" id="wifiBar">
 <svg class="wifi-icon disconnected" id="wifiIcon" viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>
 <div class="wifi-status">
-<span class="wifi-ssid" id="wifiSsid">Not connected</span>
+<span class="wifi-ssid" id="wifiSsid" onclick="toggleSsidVisibility()" title="Click to show/hide SSID">Not connected</span>
 <span class="wifi-signal" id="wifiSignal"></span>
 </div>
 <div class="wifi-details" id="wifiDetails">
@@ -445,6 +446,17 @@ let selectedNetwork=null;
 let wifiScanEvt=null;
 let wifiConnectEvt=null;
 let wifiLoading=true;
+let ssidVisible=false;
+
+function toggleSsidVisibility(){
+  if(!wifiStatus.connected||!wifiStatus.ssid)return;
+  ssidVisible=!ssidVisible;
+  updateWifiBar();
+}
+
+function maskSsid(ssid){
+  return '•'.repeat(Math.min(ssid.length,12));
+}
 
 async function loadWifiStatus(){
   wifiLoading=true;
@@ -500,7 +512,9 @@ function updateWifiBar(){
   if(wifiStatus.connected&&wifiStatus.ssid){
     icon.classList.remove('disconnected');
     icon.classList.add('connected');
-    ssid.textContent=wifiStatus.ssid;
+    ssid.textContent=ssidVisible?wifiStatus.ssid:maskSsid(wifiStatus.ssid);
+    ssid.classList.add('clickable');
+    ssid.title=ssidVisible?'Click to hide SSID':'Click to show SSID';
     signal.textContent=wifiStatus.signal||'';
     disconnectBtn.style.display='';
     browseBtn.innerHTML='<svg viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>Change Network';
@@ -508,6 +522,8 @@ function updateWifiBar(){
     icon.classList.add('disconnected');
     icon.classList.remove('connected');
     ssid.textContent='Not connected';
+    ssid.classList.remove('clickable');
+    ssid.title='';
     signal.textContent='';
     disconnectBtn.style.display='none';
     browseBtn.innerHTML='<svg viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>Browse Networks';

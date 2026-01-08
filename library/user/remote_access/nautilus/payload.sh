@@ -3,7 +3,7 @@
 # Title: Nautilus
 # Description: Web-based payload launcher with live console output and GitHub integration
 # Author: JustSomeTrout (Trout / troot.)
-# Version: 1.3.4
+# Version: 1.4
 # Firmware: Developed for Firmware version 1.0.4
 #
 # Runs uhttpd with CGI to browse and execute payloads from your browser.
@@ -15,7 +15,6 @@ WEB_DIR="$SCRIPT_DIR/www"
 PORT=8888
 PID_FILE="/tmp/nautilus.pid"
 
-# Check for uhttpd
 if ! command -v uhttpd >/dev/null 2>&1; then
     LOG "yellow" "uhttpd required (~28KB)"
     resp=$(CONFIRMATION_DIALOG "Install uhttpd?")
@@ -32,6 +31,32 @@ if ! command -v uhttpd >/dev/null 2>&1; then
     fi
 fi
 
+TTYD_STARTED=0
+if ! command -v ttyd >/dev/null 2>&1; then
+    LOG "yellow" "ttyd required for shell (~150KB)"
+    resp=$(CONFIRMATION_DIALOG "Install ttyd?")
+    if [ "$resp" = "$DUCKYSCRIPT_USER_CONFIRMED" ]; then
+        LOG "cyan" "Installing ttyd..."
+        opkg update >/dev/null 2>&1
+        if ! opkg install ttyd; then
+            LOG "red" "ttyd install failed!"
+            LOG "yellow" "Shell feature disabled"
+        else
+            /etc/init.d/ttyd disable 2>/dev/null
+            LOG "green" "ttyd installed"
+        fi
+    else
+        LOG "yellow" "Shell feature disabled"
+    fi
+fi
+
+if command -v ttyd >/dev/null 2>&1; then
+    killall ttyd 2>/dev/null
+    ttyd -i br-lan -p 7681 /bin/login &
+    TTYD_STARTED=1
+    LOG "cyan" "Shell available on port 7681"
+fi
+
 cleanup() {
     LOG "yellow" "Stopping Nautilus..."
 
@@ -40,6 +65,8 @@ cleanup() {
 
     [ -f "/tmp/nautilus_payload.pid" ] && kill $(cat "/tmp/nautilus_payload.pid") 2>/dev/null
     rm -f "/tmp/nautilus_payload.pid"
+
+    [ "$TTYD_STARTED" = "1" ] && killall ttyd 2>/dev/null
 
     rm -f /tmp/nautilus_wrapper_*.sh
     rm -f /tmp/nautilus_fifo_*
@@ -69,7 +96,6 @@ LOG ""
 LOG "yellow" '|   ~ Web Payload Launcher ~    |'
 LOG ""
 
-# Initialization
 [ ! -f "$WEB_DIR/index.html" ] && { LOG "red" "Files not found!"; exit 1; }
 chmod -R 755 "$WEB_DIR" 2>/dev/null
 chmod +x "$SCRIPT_DIR/build_cache.sh" 2>/dev/null

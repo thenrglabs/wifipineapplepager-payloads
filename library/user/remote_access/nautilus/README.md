@@ -8,7 +8,7 @@
 
 <p align="center">
 <img src="https://img.shields.io/badge/Platform-WiFi%20Pineapple%20Pager-00d4aa?style=flat-square" />
-<img src="https://img.shields.io/badge/Version-1.3.4-blue?style=flat-square" />
+<img src="https://img.shields.io/badge/Version-1.4-blue?style=flat-square" />
 <img src="https://img.shields.io/badge/Author-JustSomeTrout-purple?style=flat-square" />
 </p>
 
@@ -24,12 +24,28 @@
 ```
 
 <p align="center">
-<img width="1675" height="1098" alt="Nautilus Dashboard" src="https://github.com/user-attachments/assets/b8538b40-b585-4828-9819-cf73c137980b" />
+<img width="2694" height="828" alt="Nautilus Dashboard" src="https://github.com/user-attachments/assets/579322bc-81d6-4941-9bc2-2dfdcfe57465" />
 </p>
 
 <p align="center">
 <img width="600" height="4" alt="" src="https://github.com/user-attachments/assets/8560a6c9-b1f1-4eed-ac94-bd9e14d36ac5" />
 </p>
+
+## 🆕 New in v1.4
+
+### 🖥️ Full Shell Terminal Access
+Nautilus now includes a complete interactive shell terminal powered by ttyd:
+
+- **Full PTY Support**: Real terminal emulation with proper escape sequences, colors, and cursor control
+- **Interactive Programs**: Run `vi`, `nano`, `top`, `htop`, and any interactive CLI tool
+- **Tab Completion**: Full bash/sh tab completion support
+- **Resize Support**: Terminal automatically resizes to fit your browser window
+- **Persistent Sessions**: Shell stays active while you switch between tabs
+- **One-Click Access**: Terminal tab always available in the navigation bar
+
+Access the shell from the **Terminal** tab - no SSH client needed!
+
+---
 
 ## Overview
 
@@ -56,6 +72,7 @@ No more fumbling with D-pad navigation or manual file transfers. Just point, cli
 - **One-Click Execution**: Run any payload with a single tap
 - **Live Console**: Watch output stream in real-time with color support
 - **Stop Control**: Abort running payloads at any time
+- **Shell Terminal**: Full interactive shell access with PTY support (new in v1.4)
 
 ### 🌐 GitHub Integration
 

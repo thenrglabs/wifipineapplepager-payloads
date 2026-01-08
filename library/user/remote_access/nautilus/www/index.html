@@ -25,7 +25,16 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .sidebar::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
 .main{flex:1;display:flex;flex-direction:row;overflow:hidden;background:var(--bg)}
 .main-left{flex:1;display:flex;flex-direction:column;border-right:1px solid var(--border);min-width:300px;max-width:450px}
-.main-right{flex:2;display:flex;flex-direction:column;overflow:hidden}
+.main-right{flex:2;display:flex;flex-direction:row;overflow:hidden}
+.console-panel{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.console-panel:first-child{border-right:1px solid var(--border)}
+.shell-panel{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.shell-panel .console-header{background:var(--surface)}
+.shell-panel #shellTerminal{flex:1;background:#000;overflow:hidden}
+.shell-panel #shellTerminal .xterm{height:100%}
+.shell-panel .shell-status{font-size:0.75em;padding:2px 8px;border-radius:4px;margin-left:8px}
+.shell-panel .shell-status.connected{color:var(--accent)}
+.shell-panel .shell-status.disconnected{color:var(--danger)}
 .search{padding:12px 16px;border-bottom:1px solid var(--border)}
 .search input{width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:0.9em;transition:all 0.2s}
 .search input:focus{outline:none;border-color:var(--accent);box-shadow:var(--glow)}
@@ -77,8 +86,8 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .empty svg{width:48px;height:48px;fill:var(--border);margin-bottom:12px}
 .empty h3{color:var(--text);margin-bottom:6px;font-weight:500;font-size:1em}
 .empty p{font-size:0.85em}
-@media(max-width:1100px){.main{flex-direction:column}.main-left{max-width:none;border-right:none;border-bottom:1px solid var(--border);max-height:200px}.main-right{flex:1}}
-@media(max-width:700px){.container{flex-direction:column}.sidebar{width:100%;max-height:35vh;border-right:none;border-bottom:1px solid var(--border)}.main{flex:1}.main-left{max-height:150px}}
+@media(max-width:1100px){.main{flex-direction:column}.main-left{max-width:none;border-right:none;border-bottom:1px solid var(--border);max-height:200px}.main-right{flex:1;flex-direction:column}.console-panel:first-child{border-right:none;border-bottom:1px solid var(--border)}}
+@media(max-width:700px){.container{flex-direction:column}.sidebar{width:100%;max-height:35vh;border-right:none;border-bottom:1px solid var(--border)}.main{flex:1}.main-left{max-height:150px}.main-right{flex-direction:column}}
 .modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.8);display:none;justify-content:center;align-items:center;z-index:1000;backdrop-filter:blur(4px)}
 .modal-overlay.show{display:flex}
 .modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;min-width:300px;max-width:420px;box-shadow:0 20px 60px rgba(0,0,0,0.5)}
@@ -189,6 +198,9 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .wifi-modal .wifi-modal-footer .wifi-btn.primary:hover{filter:brightness(1.1)}
 .wifi-modal .wifi-modal-footer .wifi-btn.primary:disabled{opacity:0.5;cursor:not-allowed}
 </style>
+<link rel="stylesheet" href="xterm.css">
+<script src="xterm.min.js"></script>
+<script src="xterm-addon-fit.min.js"></script>
 </head>
 <body>
 <div class="login-overlay" id="loginOverlay">
@@ -301,9 +313,15 @@ Scanning for networks...
 </div>
 </div>
 <div class="main-right">
+<div class="console-panel">
 <div class="console-wrap">
-<div class="console-header"><span>Console Output</span><span><button onclick="clearConsole()">Clear</button> <span id="lineCount">0 lines</span></span></div>
+<div class="console-header"><span>Nautilus Console</span><span><button onclick="clearConsole()">Clear</button> <span id="lineCount">0 lines</span></span></div>
 <div class="console" id="console"></div>
+</div>
+</div>
+<div class="shell-panel">
+<div class="console-header"><span>Pager Shell<span class="shell-status disconnected" id="shellStatus">disconnected</span></span><span><button onclick="reconnectShell()">Reconnect</button></span></div>
+<div id="shellTerminal"></div>
 </div>
 </div>
 </div>
@@ -333,6 +351,93 @@ let currentTab='local';
 let runningSection=null;
 let githubPayloads={},filteredGithub={},githubPRs=[],filteredPRs=[];
 const $=id=>document.getElementById(id);
+
+let shellTerm=null,shellWs=null,shellFitAddon=null;
+const TTYD_CMD_INPUT='0',TTYD_CMD_RESIZE='1',TTYD_CMD_OUTPUT=48,TTYD_CMD_TITLE=49,TTYD_CMD_PREFS=50;
+
+function initShell(){
+  if(typeof Terminal==='undefined'){
+    console.error('xterm.js not loaded');
+    $('shellStatus').textContent='xterm not loaded';
+    return;
+  }
+  shellTerm=new Terminal({cursorBlink:true,fontSize:13,fontFamily:"'JetBrains Mono','Fira Code','Consolas',monospace",theme:{background:'#050508',foreground:'#e8e8e8',cursor:'#00d4aa'}});
+  shellFitAddon=new FitAddon.FitAddon();
+  shellTerm.loadAddon(shellFitAddon);
+  shellTerm.open($('shellTerminal'));
+  shellFitAddon.fit();
+  shellTerm.onData(data=>{
+    if(shellWs&&shellWs.readyState===1){
+      const enc=new TextEncoder();
+      const payload=new Uint8Array(data.length*3+1);
+      payload[0]=TTYD_CMD_INPUT.charCodeAt(0);
+      const stats=enc.encodeInto(data,payload.subarray(1));
+      shellWs.send(payload.subarray(0,stats.written+1));
+    }
+  });
+  window.addEventListener('resize',()=>{if(shellFitAddon)setTimeout(()=>{shellFitAddon.fit();sendShellResize();},50);});
+  new ResizeObserver(()=>{if(shellFitAddon){shellFitAddon.fit();sendShellResize();}}).observe($('shellTerminal'));
+  $('shellTerminal').addEventListener('click',()=>{if(shellTerm)shellTerm.focus();});
+}
+
+function sendShellResize(){
+  if(shellWs&&shellWs.readyState===1&&shellTerm){
+    const msg=JSON.stringify({columns:shellTerm.cols,rows:shellTerm.rows});
+    const enc=new TextEncoder();
+    shellWs.send(enc.encode(TTYD_CMD_RESIZE+msg));
+  }
+}
+
+function connectShell(){
+  if(shellWs&&shellWs.readyState<2)return;
+  $('shellStatus').textContent='connecting...';
+  $('shellStatus').className='shell-status disconnected';
+  const wsProto=location.protocol==='https:'?'wss:':'ws:';
+  const wsUrl=wsProto+'//'+location.hostname+':7681/ws';
+  shellWs=new WebSocket(wsUrl,['tty']);
+  shellWs.binaryType='arraybuffer';
+  shellWs.onopen=()=>{
+    $('shellStatus').textContent='connected';
+    $('shellStatus').className='shell-status connected';
+    if(shellFitAddon)shellFitAddon.fit();
+    const cols=shellTerm?shellTerm.cols:80,rows=shellTerm?shellTerm.rows:24;
+    const initMsg=JSON.stringify({AuthToken:'',columns:cols,rows:rows});
+    shellWs.send(new TextEncoder().encode(initMsg));
+    if(shellTerm)shellTerm.focus();
+  };
+  shellWs.onmessage=e=>{
+    if(!shellTerm)return;
+    const arr=new Uint8Array(e.data);
+    if(arr.length>0){
+      const cmd=arr[0];
+      const data=arr.slice(1);
+      if(cmd===TTYD_CMD_OUTPUT){
+        shellTerm.write(data);
+      }else if(cmd===TTYD_CMD_TITLE){
+        const title=new TextDecoder().decode(data);
+        console.log('[ttyd] title:',title);
+      }else if(cmd===TTYD_CMD_PREFS){
+        const prefs=JSON.parse(new TextDecoder().decode(data));
+        console.log('[ttyd] prefs:',prefs);
+      }
+    }
+  };
+  shellWs.onclose=e=>{
+    $('shellStatus').textContent='disconnected ('+e.code+')';
+    $('shellStatus').className='shell-status disconnected';
+    shellWs=null;
+  };
+  shellWs.onerror=e=>{
+    console.error('[ttyd] ws error:',e);
+    $('shellStatus').textContent='error';
+    $('shellStatus').className='shell-status disconnected';
+  };
+}
+
+function reconnectShell(){
+  if(shellWs){shellWs.close();shellWs=null;}
+  setTimeout(connectShell,300);
+}
 
 let wifiStatus={connected:false,ssid:'',signal:'',client_mode_enabled:false};
 let wifiNetworks=[];
@@ -1257,7 +1362,6 @@ async function installGithub(forceOverwrite=false){
       const d=JSON.parse(e.data);
       if(d.status==='success'){
         $('status').textContent='Installed: '+d.name;
-        // Refresh local payloads list
         load();
       }else{
         $('status').textContent='Install failed: '+(d.message||'Unknown error');
@@ -1475,7 +1579,11 @@ async function doLogin(){
     const b64=btoa(String.fromCharCode(...encrypted));
     const ar=await fetch('/cgi-bin/api.sh?action=auth&nonce='+encodeURIComponent(nonce)+'&data='+encodeURIComponent(b64));
     const ad=await ar.json();
-    if(ad.success){$('loginOverlay').classList.add('hidden');load();}
+    if(ad.success){
+      $('loginOverlay').classList.add('hidden');
+      load();
+      setTimeout(()=>connectShell(),500);
+    }
     else{$('loginError').textContent=ad.error||'Invalid password';$('loginError').classList.add('show');}
   }catch(e){$('loginError').textContent='Auth error: '+e.message;$('loginError').classList.add('show');}
 }
@@ -1488,7 +1596,7 @@ function showLogin(){
 }
 
 async function initAuth(){
-  if(await checkSession()){$('loginOverlay').classList.add('hidden');load();}
+  if(await checkSession()){$('loginOverlay').classList.add('hidden');load();setTimeout(()=>connectShell(),500);}
   else{showLogin();}
 }
 
@@ -1746,7 +1854,6 @@ function showPrompt(type,message,defaultVal){
   }
   $('modalOverlay').classList.add('show');
   validatePromptInput();
-  // Log prompt to console
   const line=document.createElement('div');
   line.className='line '+(type==='error'?'red':type==='alert'?'yellow':'cyan');
   line.textContent=(type==='error'?'[X] ':type==='alert'?'[!] ':'[?] ')+message+(currentPromptDefault?' (default: '+currentPromptDefault+')':'');
@@ -1807,6 +1914,7 @@ async function respondPrompt(confirmed){
 }
 
 initAuth();
+initShell();
 </script>
 </body>
 </html>
